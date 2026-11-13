@@ -162,6 +162,10 @@ test_scan(void)
 	assert(!strcmp(e[0].name, "a"));                /* largest first */
 	assert(entry_bytes(e, 1, "a") == a);
 
+	/* drill-down bars scale to the largest entry */
+	assert(bar_cells((double)e[0].bytes / (double)e[0].bytes, 24) == 24);
+	assert(bar_cells((double)e[2].bytes / (double)e[0].bytes, 24) < 24);
+
 	snprintf(excl[0], sizeof excl[0], "%s/a/sub", root);
 	n = scan_root(root, excl, 1, e, 16, NULL, NULL);
 	a = entry_bytes(e, n, "a");

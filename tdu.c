@@ -2,6 +2,7 @@
  * See LICENSE file for copyright and license details. */
 #define _XOPEN_SOURCE 700
 #include <errno.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -113,6 +114,102 @@ putrow(const char *line, double frac)
 	fputs("\033[0m\r\n", stdout);
 }
 
+/* Spinner during a drill-down scan; q or Esc aborts it. */
+static int
+drill_progress(unsigned long long done, void *ud)
+{
+	static const char spin[] = "|/-\\";
+	int *tick = ud;
+	struct pollfd pf;
+	unsigned char ch;
+
+	if (gotsig)
+		return 1;
+	printf("\r%c scanned %llu items ", spin[(*tick)++ % 4], done);
+	fflush(stdout);
+	pf.fd = STDIN_FILENO;
+	pf.events = POLLIN;
+	while (poll(&pf, 1, 0) > 0) {
+		if (read(STDIN_FILENO, &ch, 1) != 1)
+			break;
+		if (ch == 'q' || ch == 27)
+			return 1;
+	}
+	return 0;
+}
+
+/* One-level drill-down into a device's first mountpoint. */
+static void
+drill(const Device *d, int width)
+{
+	static Entry entries[512];
+	static char all[MNT_MAX][MNT_PATH], excl[MNT_MAX][MNT_PATH];
+	char bar[64 + 1], size[8];
+	unsigned long long maxb;
+	int nall, nx = 0, n, i, j, barw, cells, tick;
+
+	nall = mounts_all(mtext, all, MNT_MAX);
+	for (i = 0; i < nall; i++)
+		if (strcmp(all[i], d->mnt) != 0)
+			memcpy(excl[nx++], all[i], MNT_PATH);
+
+	for (;;) {
+		fputs("\033[H\033[2J", stdout);
+		setfg(labelcolor);
+		printf("%s  %s\033[0m\r\n\r\n", d->name, d->mnt);
+		tick = 0;
+		n = scan_root(d->mnt, excl, nx, entries, 512,
+		              drill_progress, &tick);
+		if (n < 0 || gotsig)
+			return; /* aborted */
+		qsort(entries, (size_t)n, sizeof *entries, entry_cmp);
+		maxb = n > 0 ? entries[0].bytes : 0;
+
+		barw = width - (2 + 24 + 2 + 2 + 2 + 8);
+		if (barw > 24)
+			barw = 24;
+		if (barw < 10)
+			barw = 10;
+		fputs("\033[H\033[2J", stdout);
+		setfg(labelcolor);
+		printf("%s  %s\033[0m\r\n\r\n", d->name, d->mnt);
+		for (i = 0; i < n && i < topn; i++) {
+			char line[512];
+
+			cells = maxb ? bar_cells((double)entries[i].bytes /
+			                         (double)maxb, barw) : 0;
+			for (j = 0; j < barw; j++)
+				bar[j] = j < cells ? '#' : '.';
+			bar[barw] = '\0';
+			fmt_size(entries[i].bytes, size, sizeof size);
+			snprintf(line, sizeof line, "  %-24.24s [%s] %6s",
+			         entries[i].name, bar, size);
+			putrow(line, 0.0);
+		}
+		fputs("\r\n", stdout);
+		setfg(labelcolor);
+		fputs("q back   r rescan\033[0m", stdout);
+		fflush(stdout);
+
+		for (;;) {
+			unsigned char ch;
+			ssize_t r;
+
+			r = read(STDIN_FILENO, &ch, 1);
+			if (gotsig)
+				return;
+			if (r < 0 && errno == EINTR) {
+				winched = 0;
+				break; /* redraw via rescan is overkill; back */
+			}
+			if (r <= 0 || ch == 'q' || ch == 27)
+				return;
+			if (ch == 'r')
+				break; /* rescan */
+		}
+	}
+}
+
 static void
 draw_overview(Device *devs, Stats *stats, int n, int width)
 {
@@ -168,8 +265,6 @@ main(void)
 	tcsetattr(STDIN_FILENO, TCSANOW, &t);
 	fputs("\033[?1049h\033[?25l", stdout);
 
-	(void)topn; /* drill-down lands next */
-
 	while (!gotsig) {
 		unsigned char ch;
 		ssize_t r;
@@ -191,9 +286,8 @@ main(void)
 			break;
 		if (ch == 'r')
 			n = gather(devs, stats, MNT_MAX);
-		else if (row_for_key(ch, n) >= 0) {
-			/* drill-down lands in Task 6 */
-		}
+		else if ((i = row_for_key(ch, n)) >= 0)
+			drill(&devs[i], termwidth());
 	}
 
 	tcsetattr(STDIN_FILENO, TCSANOW, &origterm);
