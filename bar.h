@@ -4,7 +4,7 @@
 
 /* Filled cells for a fraction of a width-cell bar, rounded to the
  * nearest cell, clamped to [0, width]. */
-static int
+static inline int
 bar_cells(double frac, int width)
 {
 	int cells = (int)(frac * width + 0.5);
@@ -19,7 +19,7 @@ bar_cells(double frac, int width)
 /* Fill fraction the df way: used / (used + avail), with avail the
  * space available to unprivileged users. 0 when the sum is 0, so a
  * zero-block filesystem never divides by zero. */
-static double
+static inline double
 frac_used(unsigned long long used, unsigned long long avail)
 {
 	if (used + avail == 0)
@@ -28,7 +28,7 @@ frac_used(unsigned long long used, unsigned long long avail)
 }
 
 /* Bar color by fill: ok below warn, wc from warn, cc from crit. */
-static long
+static inline long
 bar_color(double frac, double warn, double crit, long ok, long wc, long cc)
 {
 	if (frac >= crit)

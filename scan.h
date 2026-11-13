@@ -20,7 +20,7 @@ typedef struct {
 typedef int (*ScanProgress)(unsigned long long done, void *ud);
 
 /* qsort comparator: Entry bytes, descending. */
-static int
+static inline int
 entry_cmp(const void *a, const void *b)
 {
 	const Entry *x = a, *y = b;
@@ -44,7 +44,7 @@ typedef struct {
 } InoSet;
 
 /* Returns 1 when newly added, 0 when already present or on OOM. */
-static int
+static inline int
 inoset_add(InoSet *s, unsigned long long dev, unsigned long long ino)
 {
 	size_t i;
@@ -91,7 +91,7 @@ typedef struct {
 	char path[SCAN_PATH];
 } Scan;
 
-static int
+static inline int
 scan_excluded(const Scan *s)
 {
 	int i;
@@ -102,7 +102,7 @@ scan_excluded(const Scan *s)
 	return 0;
 }
 
-static int
+static inline int
 scan_tick(Scan *s)
 {
 	if (s->progress && s->done % 256 == 0 &&
@@ -113,7 +113,7 @@ scan_tick(Scan *s)
 }
 
 /* Blocks of one non-directory, hard links counted once per scan. */
-static unsigned long long
+static inline unsigned long long
 scan_file(Scan *s, const struct stat *st)
 {
 	if (st->st_nlink > 1 &&
@@ -127,7 +127,7 @@ scan_file(Scan *s, const struct stat *st)
  * Never follows symlinks, never enters excluded paths, skips
  * unreadable directories silently. To keep one fd open at a time,
  * each level lists its subdirectories before descending. */
-static unsigned long long
+static inline unsigned long long
 scan_walk(Scan *s, size_t len)
 {
 	DIR *d;
@@ -180,7 +180,7 @@ scan_walk(Scan *s, size_t len)
 	return bytes;
 }
 
-static int
+static inline int
 scan_namecmp(const void *a, const void *b)
 {
 	return strcmp(a, b);
@@ -190,7 +190,7 @@ scan_namecmp(const void *a, const void *b)
  * alphabetical order so hard-link attribution is deterministic,
  * plus one "(files)" Entry aggregating loose files in root when any
  * exist. Returns the entry count, or -1 when progress aborted. */
-static int
+static inline int
 scan_root(const char *root, char (*excl)[MNT_PATH], int nexcl,
           Entry *out, int max, ScanProgress progress, void *ud)
 {

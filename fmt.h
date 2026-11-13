@@ -8,7 +8,7 @@
  * Binary units, suffixes B K M G T P, largest unit with value >= 1.
  * One decimal when the value is below 10 (B values excepted).
  * Digits truncate toward zero, never round. */
-static void
+static inline void
 fmt_size(unsigned long long bytes, char *buf, size_t n)
 {
 	static const char sufs[] = "BKMGTP";
@@ -25,7 +25,10 @@ fmt_size(unsigned long long bytes, char *buf, size_t n)
 		snprintf(buf, n, "%d.%d%c", (int)(bytes / unit) % 10,
 		         (int)(bytes % unit * 10 / unit) % 10, sufs[i]);
 	else
-		snprintf(buf, n, "%llu%c", bytes / unit, sufs[i]);
+		/* value is at most 16384 (2^64 / 2^50); the modulus only
+		 * tells the compiler so, it never fires */
+		snprintf(buf, n, "%u%c",
+		         (unsigned)(bytes / unit) % 100000, sufs[i]);
 }
 
 #endif

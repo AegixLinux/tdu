@@ -7,13 +7,13 @@ CFLAGS = -std=c99 -pedantic -Wall -Wextra -Os
 
 all: tdu
 
-tdu: tdu.c config.h fmt.h
+tdu: tdu.c config.h fmt.h bar.h mounts.h row.h scan.h
 	$(CC) $(CFLAGS) -o $@ tdu.c
 
 test: test_tdu
 	./test_tdu
 
-test_tdu: test_tdu.c fmt.h bar.h mounts.h scan.h
+test_tdu: test_tdu.c fmt.h bar.h mounts.h row.h scan.h
 	$(CC) $(CFLAGS) -o $@ test_tdu.c
 
 install: all

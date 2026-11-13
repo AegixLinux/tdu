@@ -16,7 +16,7 @@ typedef struct {
 
 /* Rewrite \040-style octal escapes in place; /proc/mounts emits
  * them for spaces, tabs, newlines and backslashes in paths. */
-static void
+static inline void
 mnt_unescape(char *s)
 {
 	char *r = s, *w = s;
@@ -36,7 +36,7 @@ mnt_unescape(char *s)
 	*w = '\0';
 }
 
-static void
+static inline void
 mnt_copy(char *dst, size_t n, const char *tok, size_t len)
 {
 	if (len >= n)
@@ -47,7 +47,7 @@ mnt_copy(char *dst, size_t n, const char *tok, size_t len)
 
 /* Pull the first two space-separated fields out of one line.
  * Returns 0 on a line with fewer than two fields. */
-static int
+static inline int
 mnt_fields(const char *line, size_t len,
            const char **src, size_t *srclen,
            const char **mnt, size_t *mntlen)
@@ -69,7 +69,7 @@ mnt_fields(const char *line, size_t len,
 /* One Device per /dev/-backed source in text (raw /proc/mounts
  * content). First mount wins; later mounts of the same source
  * append to extra as " +/path". Returns the device count. */
-static int
+static inline int
 mounts_parse(const char *text, Device *devs, int max)
 {
 	const char *p = text, *eol, *src, *mnt;
@@ -118,7 +118,7 @@ mounts_parse(const char *text, Device *devs, int max)
 
 /* Every mountpoint of every line, any fstype, unescaped: the
  * drill-down boundary list. Returns the count. */
-static int
+static inline int
 mounts_all(const char *text, char (*mnts)[MNT_PATH], int max)
 {
 	const char *p = text, *eol, *src, *mnt;

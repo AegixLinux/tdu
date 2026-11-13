@@ -10,6 +10,7 @@
 #include "bar.h"
 #include "fmt.h"
 #include "mounts.h"
+#include "row.h"
 #include "scan.h"
 
 static int ngroups = 0;
@@ -170,12 +171,45 @@ test_scan(void)
 	ok("scan");
 }
 
+static void
+test_row(void)
+{
+	Device d;
+	Stats s;
+	char out[128];
+
+	/* selection keys: digits, then letters skipping q and r */
+	assert(key_for_row(0) == '1' && key_for_row(8) == '9');
+	assert(key_for_row(9) == 'a');
+	assert(key_for_row(25) == 's' && key_for_row(26) == 't');
+	assert(row_for_key('2', 5) == 1 && row_for_key('q', 5) == -1);
+	assert(row_for_key('a', 5) == -1); /* only 5 rows, a is row 9 */
+
+	memset(&d, 0, sizeof d);
+	strcpy(d.src, "/dev/mapper/aegixluks");
+	strcpy(d.name, "aegixluks");
+	strcpy(d.mnt, "/");
+	strcpy(d.extra, " +/home");
+	s.total = 1007ULL << 30;
+	s.used = 671ULL << 30;
+	s.avail = 331ULL << 30;
+	row_render(&d, &s, 0, 100, out, sizeof out);
+	assert(strstr(out, "1") && strstr(out, "aegixluks"));
+	assert(strstr(out, "+/home"));
+	assert(strstr(out, "[") && strstr(out, "%") && strstr(out, "free"));
+	assert(strlen(out) <= 100);
+	row_render(&d, &s, 0, 48, out, sizeof out);
+	assert(strlen(out) <= 48 && !strstr(out, "free") && strstr(out, "["));
+	ok("row");
+}
+
 int
 main(void)
 {
 	test_fmt_size();
 	test_bar();
 	test_mounts();
+	test_row();
 	test_scan();
 	printf("%d test groups passed\n", ngroups);
 	return 0;
