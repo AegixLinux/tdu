@@ -1,11 +1,16 @@
 /* test_tdu: unit tests for tdu's pure headers */
+#define _XOPEN_SOURCE 700
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "bar.h"
 #include "fmt.h"
 #include "mounts.h"
+#include "scan.h"
 
 static int ngroups = 0;
 
@@ -79,12 +84,99 @@ test_mounts(void)
 	ok("mounts");
 }
 
+static void
+mkfile(const char *root, const char *rel, size_t kb)
+{
+	char p[512], buf[1024];
+	FILE *f;
+	size_t i;
+
+	memset(buf, 'x', sizeof buf);
+	snprintf(p, sizeof p, "%s/%s", root, rel);
+	f = fopen(p, "w");
+	assert(f);
+	for (i = 0; i < kb; i++)
+		assert(fwrite(buf, 1, sizeof buf, f) == sizeof buf);
+	assert(fclose(f) == 0);
+}
+
+static unsigned long long
+entry_bytes(const Entry *e, int n, const char *name)
+{
+	int i;
+
+	for (i = 0; i < n; i++)
+		if (!strcmp(e[i].name, name))
+			return e[i].bytes;
+	assert(!"entry not found");
+	return 0;
+}
+
+static int
+abort_cb(unsigned long long done, void *ud)
+{
+	(void)done;
+	(void)ud;
+	return 1;
+}
+
+static void
+test_scan(void)
+{
+	char root[] = "/tmp/tdu-test-XXXXXX";
+	char p1[512], p2[512];
+	char excl[1][MNT_PATH];
+	Entry e[16];
+	unsigned long long a, b, c, files;
+	int n;
+
+	assert(mkdtemp(root));
+	snprintf(p1, sizeof p1, "%s/a", root);      assert(mkdir(p1, 0755) == 0);
+	snprintf(p1, sizeof p1, "%s/a/sub", root);  assert(mkdir(p1, 0755) == 0);
+	snprintf(p1, sizeof p1, "%s/b", root);      assert(mkdir(p1, 0755) == 0);
+	snprintf(p1, sizeof p1, "%s/c", root);      assert(mkdir(p1, 0755) == 0);
+	mkfile(root, "a/big", 200);
+	mkfile(root, "a/sub/mid", 100);
+	mkfile(root, "b/small", 50);
+	mkfile(root, "top", 10);
+	snprintf(p1, sizeof p1, "%s/a/big", root);
+	snprintf(p2, sizeof p2, "%s/b/biglink", root);
+	assert(link(p1, p2) == 0);
+	snprintf(p1, sizeof p1, "%s/a", root);
+	snprintf(p2, sizeof p2, "%s/c/loop", root);
+	assert(symlink(p1, p2) == 0);
+
+	n = scan_root(root, NULL, 0, e, 16, NULL, NULL);
+	assert(n == 4); /* a, b, c, (files) */
+	a = entry_bytes(e, n, "a");
+	b = entry_bytes(e, n, "b");
+	c = entry_bytes(e, n, "c");
+	files = entry_bytes(e, n, "(files)");
+	assert(a >= 300 * 1024ULL && a < 340 * 1024ULL);
+	assert(b >= 50 * 1024ULL && b < 70 * 1024ULL);  /* biglink deduped */
+	assert(c < 16 * 1024ULL);                       /* symlink not followed */
+	assert(files >= 10 * 1024ULL && files < 20 * 1024ULL);
+
+	qsort(e, (size_t)n, sizeof *e, entry_cmp);
+	assert(!strcmp(e[0].name, "a"));                /* largest first */
+	assert(entry_bytes(e, 1, "a") == a);
+
+	snprintf(excl[0], sizeof excl[0], "%s/a/sub", root);
+	n = scan_root(root, excl, 1, e, 16, NULL, NULL);
+	a = entry_bytes(e, n, "a");
+	assert(a >= 200 * 1024ULL && a < 240 * 1024ULL); /* mid excluded */
+
+	assert(scan_root(root, NULL, 0, e, 16, abort_cb, NULL) == -1);
+	ok("scan");
+}
+
 int
 main(void)
 {
 	test_fmt_size();
 	test_bar();
 	test_mounts();
+	test_scan();
 	printf("%d test groups passed\n", ngroups);
 	return 0;
 }
