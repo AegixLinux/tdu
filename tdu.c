@@ -132,6 +132,10 @@ drill_progress(unsigned long long done, void *ud)
 	while (poll(&pf, 1, 0) > 0) {
 		if (read(STDIN_FILENO, &ch, 1) != 1)
 			break;
+		if (ch == 3) {
+			gotsig = 1;
+			return 1;
+		}
 		if (ch == 'q' || ch == 27)
 			return 1;
 	}
@@ -140,7 +144,7 @@ drill_progress(unsigned long long done, void *ud)
 
 /* One-level drill-down into a device's first mountpoint. */
 static void
-drill(const Device *d, int width)
+drill(const Device *d)
 {
 	static Entry entries[512];
 	static char all[MNT_MAX][MNT_PATH], excl[MNT_MAX][MNT_PATH];
@@ -165,45 +169,51 @@ drill(const Device *d, int width)
 		qsort(entries, (size_t)n, sizeof *entries, entry_cmp);
 		maxb = n > 0 ? entries[0].bytes : 0;
 
-		barw = width - (2 + 24 + 2 + 2 + 2 + 8);
-		if (barw > 24)
-			barw = 24;
-		if (barw < 10)
-			barw = 10;
-		fputs("\033[H\033[2J", stdout);
-		setfg(labelcolor);
-		printf("%s  %s\033[0m\r\n\r\n", d->name, d->mnt);
-		for (i = 0; i < n && i < topn; i++) {
-			char line[512];
-
-			cells = maxb ? bar_cells((double)entries[i].bytes /
-			                         (double)maxb, barw) : 0;
-			for (j = 0; j < barw; j++)
-				bar[j] = j < cells ? '#' : '.';
-			bar[barw] = '\0';
-			fmt_size(entries[i].bytes, size, sizeof size);
-			snprintf(line, sizeof line, "  %-24.24s [%s] %6s",
-			         entries[i].name, bar, size);
-			putrow(line, 0.0);
-		}
-		fputs("\r\n", stdout);
-		setfg(labelcolor);
-		fputs("q back   r rescan\033[0m", stdout);
-		fflush(stdout);
-
-		for (;;) {
+		for (;;) { /* display loop: redraws, never rescans */
 			unsigned char ch;
 			ssize_t r;
+
+			barw = termwidth() - (2 + 24 + 2 + 2 + 2 + 8);
+			if (barw > 24)
+				barw = 24;
+			if (barw < 10)
+				barw = 10;
+			fputs("\033[H\033[2J", stdout);
+			setfg(labelcolor);
+			printf("%s  %s\033[0m\r\n\r\n", d->name, d->mnt);
+			for (i = 0; i < n && i < topn; i++) {
+				char line[512];
+
+				cells = maxb ?
+				    bar_cells((double)entries[i].bytes /
+				              (double)maxb, barw) : 0;
+				for (j = 0; j < barw; j++)
+					bar[j] = j < cells ? '#' : '.';
+				bar[barw] = '\0';
+				fmt_size(entries[i].bytes, size, sizeof size);
+				snprintf(line, sizeof line,
+				         "  %-24.24s [%s] %6s",
+				         entries[i].name, bar, size);
+				putrow(line, 0.0);
+			}
+			fputs("\r\n", stdout);
+			setfg(labelcolor);
+			fputs("q back   r rescan\033[0m", stdout);
+			fflush(stdout);
 
 			r = read(STDIN_FILENO, &ch, 1);
 			if (gotsig)
 				return;
 			if (r < 0 && errno == EINTR) {
 				winched = 0;
-				break; /* redraw via rescan is overkill; back */
+				continue; /* redraw at the new width */
 			}
 			if (r <= 0 || ch == 'q' || ch == 27)
 				return;
+			if (ch == 3) {
+				gotsig = 1;
+				return;
+			}
 			if (ch == 'r')
 				break; /* rescan */
 		}
@@ -287,7 +297,7 @@ main(void)
 		if (ch == 'r')
 			n = gather(devs, stats, MNT_MAX);
 		else if ((i = row_for_key(ch, n)) >= 0)
-			drill(&devs[i], termwidth());
+			drill(&devs[i]);
 	}
 
 	tcsetattr(STDIN_FILENO, TCSANOW, &origterm);

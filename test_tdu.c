@@ -121,6 +121,42 @@ abort_cb(unsigned long long done, void *ud)
 	return 1;
 }
 
+static int
+cap_cb(unsigned long long done, void *ud)
+{
+	(void)ud;
+	return done > 5000; /* a correctly excluded scan stays tiny */
+}
+
+/* Exclusion must hold when the scan root is "/" itself: paths are
+ * joined as "/name", not "//name", or the mount-table boundary list
+ * never matches and the drill crosses into /proc and sibling
+ * devices. */
+static void
+test_scan_rootfs(void)
+{
+	static char excl[256][MNT_PATH];
+	DIR *d;
+	struct dirent *de;
+	Entry e[16];
+	int nx = 0, n, i;
+
+	d = opendir("/");
+	assert(d);
+	while ((de = readdir(d)) != NULL && nx < 256) {
+		if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, ".."))
+			continue;
+		snprintf(excl[nx], MNT_PATH, "/%.250s", de->d_name);
+		nx++;
+	}
+	closedir(d);
+	n = scan_root("/", excl, nx, e, 16, cap_cb, NULL);
+	assert(n >= 0); /* excluded everything, so no deep descent */
+	for (i = 0; i < n; i++)
+		assert(!strcmp(e[i].name, "(files)"));
+	ok("scan rootfs exclusion");
+}
+
 static void
 test_scan(void)
 {
@@ -215,6 +251,7 @@ main(void)
 	test_mounts();
 	test_row();
 	test_scan();
+	test_scan_rootfs();
 	printf("%d test groups passed\n", ngroups);
 	return 0;
 }

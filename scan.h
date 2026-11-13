@@ -214,8 +214,12 @@ scan_root(const char *root, char (*excl)[MNT_PATH], int nexcl,
 	memcpy(s.path, root, len + 1);
 	while (len > 1 && s.path[len - 1] == '/')
 		s.path[--len] = '\0';
+	/* for the root directory itself, children join as "/name",
+	 * never "//name", or exclusion paths would not match */
+	if (len == 1 && s.path[0] == '/')
+		s.path[--len] = '\0';
 
-	if ((d = opendir(s.path)) == NULL)
+	if ((d = opendir(len ? s.path : "/")) == NULL)
 		return 0;
 	while (!s.aborted && (de = readdir(d)) != NULL) {
 		if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, ".."))
