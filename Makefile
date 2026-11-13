@@ -13,7 +13,7 @@ tdu: tdu.c config.h fmt.h
 test: test_tdu
 	./test_tdu
 
-test_tdu: test_tdu.c fmt.h bar.h
+test_tdu: test_tdu.c fmt.h bar.h mounts.h
 	$(CC) $(CFLAGS) -o $@ test_tdu.c
 
 install: all

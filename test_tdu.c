@@ -5,6 +5,7 @@
 
 #include "bar.h"
 #include "fmt.h"
+#include "mounts.h"
 
 static int ngroups = 0;
 
@@ -44,11 +45,46 @@ test_bar(void)
 	ok("bar");
 }
 
+static void
+test_mounts(void)
+{
+	static const char mtext[] =
+	    "/dev/mapper/aegixluks / btrfs rw 0 0\n"
+	    "proc /proc proc rw 0 0\n"
+	    "/dev/mapper/aegixluks /home btrfs rw 0 0\n"
+	    "/dev/nvme0n1p1 /boot vfat rw 0 0\n"
+	    "/dev/sdb1 /mnt/my\\040drive ext4 rw 0 0\n"
+	    "tmpfs /tmp tmpfs rw 0 0\n";
+	Device devs[MNT_MAX];
+	char mnts[MNT_MAX][MNT_PATH];
+	int n, i, seen = 0;
+
+	n = mounts_parse(mtext, devs, MNT_MAX);
+	assert(n == 3);
+	assert(!strcmp(devs[0].src, "/dev/mapper/aegixluks"));
+	assert(!strcmp(devs[0].name, "aegixluks"));
+	assert(!strcmp(devs[0].mnt, "/"));
+	assert(!strcmp(devs[0].extra, " +/home"));
+	assert(!strcmp(devs[1].name, "nvme0n1p1"));
+	assert(!strcmp(devs[1].extra, ""));
+	assert(!strcmp(devs[2].mnt, "/mnt/my drive")); /* \040 unescaped */
+
+	n = mounts_all(mtext, mnts, MNT_MAX);
+	assert(n == 6);
+	for (i = 0; i < n; i++)
+		if (!strcmp(mnts[i], "/proc") || !strcmp(mnts[i], "/tmp") ||
+		    !strcmp(mnts[i], "/mnt/my drive"))
+			seen++;
+	assert(seen == 3);
+	ok("mounts");
+}
+
 int
 main(void)
 {
 	test_fmt_size();
 	test_bar();
+	test_mounts();
 	printf("%d test groups passed\n", ngroups);
 	return 0;
 }
